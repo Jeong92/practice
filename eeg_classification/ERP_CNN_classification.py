@@ -101,13 +101,14 @@ def main():
         test_x, test_y = shuffle(test_x, test_y)
 
         # CNN modeling
-        model = CNN_model()
+        model = RNN_LSTM()
         print('Training stage')
         print('==================')
         model.fit(train_x, train_y,
                   batch_size=4,
                   epochs=100,
-                  shuffle=True,)
+                  shuffle=True
+                  )
 
         score, acc = model.evaluate(test_x, test_y, batch_size=4)
         print('Test performance: accuracy={0}, loss={1}'.format(acc, score))

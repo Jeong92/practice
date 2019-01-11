@@ -1,11 +1,9 @@
 # library import
-from typing import List, Any
-
 import scipy.io as sio  # load .mat file
-import os  # directory setting
 import numpy as np
 from keras import layers, models, optimizers
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 
 
 # load data for classification using LSTM
@@ -18,7 +16,7 @@ def Data():
     erp_file = 'erp_wordretrieval_N69.mat'
     erp_data = sio.loadmat(erp_dir + erp_file)
     erp_raw = erp_data['erp_x']
-    n_sample, n_classes = np.shape(erp_raw)
+    n_sample, n_classes = np.shape(erp_raw)[0], np.shape(erp_raw)[3]
     print('Finished ERP Data per %s classes from %s participants\n' % (n_classes, n_sample))
 
     # split train-test data for resampling(N=5)
@@ -34,15 +32,17 @@ def Data():
 class RNN_LSTM(models.Model):
     def __init__(self):
         x = layers.Input(shape=(301, 62))
-        h = layers.LSTM(62, dropout=0.4, recurrent_dropout=0.4)(x)
+        h = layers.LSTM(8, dropout=0.2, recurrent_dropout=0.2, return_sequences=False)(x)
+        h = layers.Dropout(0.5)(h)
         y = layers.Dense(1, activation='sigmoid')(h)
         super().__init__(x, y)
 
-        sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9)
+        # rsmprop = optimizers.rmsprop(lr=0.01)
 
         # try using different optimizers and different optimizer config
-        self.compile(loss='mse',
+        self.compile(loss='binary_crossentropy',
                      optimizer='sgd', metrics=['accuracy'])
+
 
 # load eeg files
 def main():
@@ -50,14 +50,32 @@ def main():
 
     # for loop
     for j, (train_idx, test_idx) in enumerate(folds):
+        print('\n Sampling Process ', j+1)
         train_subj = erp_raw[train_idx]
         test_subj = erp_raw[test_idx]
+
         # erp sorting
-        train_x = np.concatenate((train_subj[:][0], train_subj[:][1]), axis=0)
+        train_x = np.append(train_subj[:, :, :, 0], train_subj[:, :, :, 1], axis=0)
+        train_y = np.append(np.zeros(train_subj.shape[0])+1, np.zeros(train_subj.shape[0])+2, axis=0)
+        test_x = np.append(test_subj[:, :, :, 0], test_subj[:, :, :, 1], axis=0)
+        test_y = np.append(np.zeros(test_subj.shape[0])+1, np.zeros(test_subj.shape[0])+2, axis=0)
 
+        # erp shuffling
+        train_x, train_y = shuffle(train_x, train_y)
+        test_x, test_y = shuffle(test_x, test_y)
 
-
-        train_x, train_y = train_subj[0], train_subj[1]
-
+        # LSTM modeling
         model = RNN_LSTM()
+        print('Training stage')
+        print('==================')
+        model.fit(train_x, train_y,
+                  batch_size=16,
+                  epochs=8,
+                  shuffle=True,
+                  validation_split=0.2)
+        score, acc = model.evaluate(test_x, test_y, batch_size=4)
+        print(model.predict(test_x))
+        print('Test performance: accuracy={0}, loss={1}'.format(acc, score))
 
+main()
+#score, acc, train_y, test_y = main()
